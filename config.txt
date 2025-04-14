@@ -1,0 +1,6 @@
+#epg链接，一行一个
+https://epg.27481716.xyz/epg.xml
+https://mytvsuperepg.860775.xyz/epg.xml
+https://raw.githubusercontent.com/fanmingming/live/main/e.xml
+https://e.erw.cc/all.xml
+https://epg.pw/xmltv/epg_TW.xml
