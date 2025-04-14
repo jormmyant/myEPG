@@ -1,0 +1,83 @@
+name: 'Update schedule'
+
+on:
+  schedule:
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+jobs:
+  push:
+    runs-on: ${{ matrix.operating-system }}
+    timeout-minutes: 240
+    strategy:
+      matrix:
+        operating-system: [ 'ubuntu-latest' ]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Run with setup-python 3.13
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+          update-environment: true
+          cache: 'pipenv' # 此设置对Pipenv的支持可能有限，建议使用下面的专用缓存步骤
+
+      - name: Install pipenv
+        run: pip3 install --user pipenv
+
+      # 🔥 新增的核心步骤：缓存Pipenv虚拟环境
+      - name: Cache Pipenv virtualenv
+        uses: actions/cache@v3
+        id: cache-pipenv
+        with:
+          path: ~/.local/share/virtualenvs # Pipenv默认在此创建虚拟环境
+          key: ${{ runner.os }}-pipenv-${{ hashFiles('**/Pipfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pipenv-
+
+      # 仅在缓存未命中时安装依赖
+      - name: Install dependencies
+        if: steps.cache-pipenv.outputs.cache-hit != 'true'
+        run: |
+          pipenv --python 3.13
+          pipenv install --deploy
+      - name: Install lxml library
+        run: pipenv run pip install lxml
+      - name: Update EPG
+        run: pipenv run epg
+      - name: Commit and push if changed
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          if [[ -f "output/epg.xml" ]]; then
+            git add -f "output/epg.xml"
+          fi
+          if [[ -f "output/epg.gz" ]]; then
+            git add -f "output/epg.gz"
+          fi
+          if ! git diff --staged --quiet; then
+            git reset --soft $(git rev-list --max-parents=0 HEAD)
+            git commit --amend -m "Github Action Auto Updated"
+            git push --force
+          fi
+      
+      - name: Mirror the Github organization repos to Gitee.
+        continue-on-error: true  # 即使此步骤失败，工作流也会继续
+        uses: Yikun/hub-mirror-action@master
+        with:
+          src: 'github/jormmyant'    			
+          dst: 'gitee/jormmyant'   
+          dst_key: ${{ secrets.GITEE_PRIVATE_KEY }}  
+          dst_token:  ${{ secrets.GITEE_TOKEN }}  
+          force_update: true
+          static_list: "myEPG"
+          account_type: org   		
+          debug: true
+          timeout: 30  # 将超时时间设置为30秒
+          api_timeout: 30  # 增加API调用的超时时间（秒）
